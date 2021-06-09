@@ -1,6 +1,22 @@
+# cuda temp files
 *.i
 *.ii
 *.gpu
 *.ptx
 *.cubin
 *.fatbin
+
+# build directory
+build
+out
+
+# CMake Caches
+CMakeSettings.json
+CMakeCache.txt
+CmakeFiles
+
+# Visual Studio config
+.vs
+
+# Test resources
+test.MOV
