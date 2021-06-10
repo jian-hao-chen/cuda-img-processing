@@ -3,6 +3,8 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 
+void mirror_cu(cv::cuda::GpuMat src, cv::cuda::GpuMat dst, int h, int w);
+
 int main(int argc, char* argv[])
 {
         /* Checks arg format. */
@@ -26,6 +28,8 @@ int main(int argc, char* argv[])
         cv::String win_name = cv::String(argv[0]);
         cv::namedWindow(win_name);
 
+        int h = cap.get(cv::CAP_PROP_FRAME_HEIGHT);
+        int w = cap.get(cv::CAP_PROP_FRAME_WIDTH);
         /* Reads frames. */
         while (true) {
                 cv::Mat frame;
@@ -33,7 +37,14 @@ int main(int argc, char* argv[])
                 if (frame.empty()) {
                         break;
                 }
-                cv::imshow(win_name, frame);
+                cv::Mat dst(h, w, CV_8UC3, cv::Scalar(0, 0, 0));  // Mat on CPU memory.
+                cv::cuda::GpuMat cu_dst(h, w, CV_8UC3, cv::Scalar(0, 0, 0));  // Mat on GPU memory.
+                cv::cuda::GpuMat cu_src;
+                cu_src.upload(frame);
+                mirror_cu(cu_src, cu_dst, h, w);
+                cu_dst.download(dst);
+
+                cv::imshow(win_name, dst);
 
                 /* Presses ESC to exit. */
                 if (cv::waitKey(10) == 27) {
