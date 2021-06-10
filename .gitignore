@@ -9,6 +9,7 @@
 # build directory
 build
 out
+temp
 
 # CMake Caches
 CMakeSettings.json
@@ -17,6 +18,7 @@ CmakeFiles
 
 # Visual Studio config
 .vs
+.vscode
 
 # Test resources
 test.MOV
