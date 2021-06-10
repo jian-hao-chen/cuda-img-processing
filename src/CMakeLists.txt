@@ -1,14 +1,15 @@
+cmake_minimum_required(VERSION 3.9)
+project(cuda-img-proc
+	LANGUAGES CXX CUDA
+)
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
-include_directories(../opencv/include)
+find_package(OpenCV REQUIRED)
+include_directories(${OpenCV_INCLUDE_DIRS})
 
-find_package(CUDAToolkit REQUIRED)
-add_library(img_proc img_proc.cu)
+add_library(img_proc img_proc.cu img_proc.cuh)
 target_compile_features(img_proc PUBLIC cxx_std_11)
-target_link_libraries(img_proc CUDA::cudart)
 
 add_executable(${PROJECT_NAME} main.cpp)
-if(WIN32)
-	target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/pre-built/vc16/lib/opencv_world452d.lib)
-endif()
-#target_include_directories(${PROJECT_NAME} PRIVATE ../include)
+target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} img_proc)
