@@ -1,6 +1,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include <opencv2/opencv.hpp>
 
@@ -8,6 +9,7 @@ int VIDEO_CODEC = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
 char *SRC_PATH;
 char *DST_PATH;
 
+bool IS_CPU = false;
 bool IS_MIRROR = false;
 bool IS_GAMMA_CORRECT = false;
 bool IS_DENOISE = false;
@@ -19,6 +21,9 @@ void gamma_correct_cu(cv::cuda::GpuMat src, cv::cuda::GpuMat dst, int h, int w,
                       float gamma);
 void gaussian_cu(cv::cuda::GpuMat src, cv::cuda::GpuMat dst, int h, int w);
 void median_cu(cv::cuda::GpuMat src, cv::cuda::GpuMat dst, int h, int w);
+void mirror(cv::Mat &src, cv::Mat &dst, int h, int w);
+void gamma_correct(cv::Mat &src, cv::Mat &dst, int h, int w, float gamma);
+void gaussian(cv::Mat &src, cv::Mat &dst, int h, int w);
 
 int main(int argc, char *argv[])
 {
@@ -44,26 +49,39 @@ int main(int argc, char *argv[])
                 }
                 /* Mat on RAM for CPU. */
                 cv::Mat dst(h, w, CV_8UC3, cv::Scalar(0, 0, 0));
-                /* Mat on VRAM for GPU. */
-                cv::cuda::GpuMat cu_dst(h, w, CV_8UC3, cv::Scalar(0, 0, 0));
-                cv::cuda::GpuMat cu_src;
-                cu_src.upload(frame);
                 
-                if (IS_MIRROR) {
-                        mirror_cu(cu_src, cu_dst, h, w);
-                        cu_dst.copyTo(cu_src);
+                if (IS_CPU) {
+                        cv::Mat src(frame);
+                        if (IS_MIRROR) {
+                                mirror(src, dst, h, w);
+                                dst.copyTo(src);
+                        }
+                        if (IS_DENOISE) {
+                                median(src, dst, h, w);
+                                dst.copyTo(src);
+                        }
+                        if (IS_GAMMA_CORRECT) {
+                                gamma_correct(src, dst, h, w, GAMMA);
+                        }
                 }
-                if (IS_DENOISE) {
-                        median_cu(cu_src, cu_dst, h, w);
-                        cu_dst.copyTo(cu_src);
+                else {
+                        /* Mat on VRAM for GPU. */
+                        cv::cuda::GpuMat cu_dst(h, w, CV_8UC3, cv::Scalar(0, 0, 0));
+                        cv::cuda::GpuMat cu_src;
+                        cu_src.upload(frame);
+                        if (IS_MIRROR) {
+                                mirror_cu(cu_src, cu_dst, h, w);
+                                cu_dst.copyTo(cu_src);
+                        }
+                        if (IS_DENOISE) {
+                                median_cu(cu_src, cu_dst, h, w);
+                                cu_dst.copyTo(cu_src);
+                        }
+                        if (IS_GAMMA_CORRECT) {
+                                gamma_correct_cu(cu_src, cu_dst, h, w, GAMMA);
+                        }
+                        cu_dst.download(dst);
                 }
-                if (IS_GAMMA_CORRECT) {
-                        gamma_correct_cu(cu_src, cu_dst, h, w, GAMMA);
-                        //cu_dst.copyTo(cu_src);
-                }
-                
-
-                cu_dst.download(dst);
                 video.write(dst);
         }
         
@@ -83,7 +101,7 @@ void parse_args(int argc, char *argv[])
 
         int cmd_opt = 0;
         while (true) {
-                cmd_opt = getopt(argc, argv, "dmg:");
+                cmd_opt = getopt(argc, argv, "cdmg:");
 
                 /* All args were parsed. */
                 if (cmd_opt == -1) {
@@ -91,6 +109,10 @@ void parse_args(int argc, char *argv[])
                 }
 
                 switch (cmd_opt) {
+                case 'c':
+                        IS_CPU = true;
+                        printf("[INFO] -c CPU mode.\n");
+                        break;
                 case 'd':
                         IS_DENOISE = true;
                         printf("[INFO] -d Enable denoise.\n");
@@ -119,4 +141,31 @@ void parse_args(int argc, char *argv[])
                 SRC_PATH = argv[optind];
                 DST_PATH = argv[optind + 1];
         }
+}
+
+void mirror(cv::Mat &src, cv::Mat &dst, int h, int w)
+{
+        for (size_t y = 0; y < h; y++) {
+                for (size_t x = 0; x < w; x++) {
+                        dst(y, x) = src(y, w - x - 1);
+                }
+        }  
+}
+
+void gamma_correct(cv::Mat &src, cv::Mat &dst, int h, int w, float gamma)
+{
+        for (size_t y = 0; y < h; y++) {
+                for (size_t x = 0; x < w; x++) {
+                        
+                }
+        }  
+}
+
+void gaussian(cv::Mat &src, cv::Mat &dst, int h, int w)
+{
+        for (size_t y = 0; y < h; y++) {
+                for (size_t x = 0; x < w; x++) {
+                        /* code */
+                }
+        }  
 }
