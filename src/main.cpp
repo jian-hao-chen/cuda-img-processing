@@ -1,35 +1,39 @@
+#include <unistd.h>
+#include <stdio.h>
 #include <stdlib.h>
 
-#include <iostream>
 #include <opencv2/opencv.hpp>
 
+int VIDEO_CODEC = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
+char *SRC_PATH;
+char *DST_PATH;
+
+bool IS_MIRROR = false;
+bool IS_GAMMA_CORRECT = false;
+bool IS_GAUSSIAN = false;
+float GAMMA;
+
+void parse_args(int argc, char *argv[]);
 void mirror_cu(cv::cuda::GpuMat src, cv::cuda::GpuMat dst, int h, int w);
+void gamma_correct_cu(cv::cuda::GpuMat src, cv::cuda::GpuMat dst, int h, int w,
+                      float gamma);
+void gaussian_cu(cv::cuda::GpuMat src, cv::cuda::GpuMat dst, int h, int w);
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
-        /* Checks arg format. */
-        if (argc < 2) {
-                std::cout << "[ERROR] Please enter the path of video." << std::endl;
-                return EXIT_FAILURE;
-        }
-
-        /* Parses args. */
-        std::cout << "[INFO] Input file: " << argv[1] << std::endl;
-        for (size_t i = 2; i < argc; i++) {
-                std::cout << "[INFO] arg" << i << ": " << argv[i] << std::endl;
-        }
+        parse_args(argc, argv);
 
         /* Opens video. */
-        cv::VideoCapture cap(argv[1]);
+        cv::VideoCapture cap(SRC_PATH);
         if (!cap.isOpened()) {
-                std::cout << "[ERROR] " << argv[1] << " can't be opened!" << std::endl;
+                printf("[ ERR] %s can't be opened!", SRC_PATH);
         }
-
-        cv::String win_name = cv::String(argv[0]);
-        cv::namedWindow(win_name);
-
         int h = cap.get(cv::CAP_PROP_FRAME_HEIGHT);
         int w = cap.get(cv::CAP_PROP_FRAME_WIDTH);
+
+        /* Creats video writer. */
+        cv::VideoWriter video(DST_PATH, VIDEO_CODEC, 25, cv::Size(w, h));
+
         /* Reads frames. */
         while (true) {
                 cv::Mat frame;
@@ -37,22 +41,75 @@ int main(int argc, char* argv[])
                 if (frame.empty()) {
                         break;
                 }
-                cv::Mat dst(h, w, CV_8UC3, cv::Scalar(0, 0, 0));  // Mat on CPU memory.
-                cv::cuda::GpuMat cu_dst(h, w, CV_8UC3, cv::Scalar(0, 0, 0));  // Mat on GPU memory.
+                /* Mat on RAM for CPU. */
+                cv::Mat dst(h, w, CV_8UC3, cv::Scalar(0, 0, 0));
+                /* Mat on VRAM for GPU. */
+                cv::cuda::GpuMat cu_dst(h, w, CV_8UC3, cv::Scalar(0, 0, 0));
                 cv::cuda::GpuMat cu_src;
                 cu_src.upload(frame);
-                mirror_cu(cu_src, cu_dst, h, w);
-                cu_dst.download(dst);
-
-                cv::imshow(win_name, dst);
-
-                /* Presses ESC to exit. */
-                if (cv::waitKey(10) == 27) {
-                        break;
+                
+                if (IS_MIRROR) {
+                        mirror_cu(cu_src, cu_dst, h, w);
+                        cu_dst.copyTo(cu_src);
                 }
+                if (IS_GAMMA_CORRECT) {
+                        gamma_correct_cu(cu_src, cu_dst, h, w, GAMMA);
+                }
+
+                cu_dst.download(dst);
+                video.write(dst);
         }
+        
+        /* All Done. */
         cap.release();
-        cv::destroyAllWindows();
+        video.release();
 
         return EXIT_SUCCESS;
+}
+
+void parse_args(int argc, char *argv[])
+{
+        if (argc < 3) {
+                printf("Usage: cuda-img-proc [-d] <src_path> <dst_path>\n");
+                exit(EXIT_FAILURE);
+        }
+
+        int cmd_opt = 0;
+        while (true) {
+                cmd_opt = getopt(argc, argv, "mg:");
+
+                /* All args were parsed. */
+                if (cmd_opt == -1) {
+                        break;
+                }
+
+                switch (cmd_opt) {
+                case 'd':
+                        IS_GAUSSIAN = true;
+                        printf("[INFO] -d Enable denoise.");
+                        break;
+                case 'g':
+                        IS_GAMMA_CORRECT = true;
+                        GAMMA = atof(optarg);
+                        printf("[INFO] -g Enable gamma correction, ");
+                        printf("GAMMA=%.2f\n", GAMMA);
+                        break;
+                case 'm':
+                        IS_MIRROR = true;
+                        printf("[INFO] -m Enable mirror.\n");
+                        break;
+                case '?':
+                        fprintf(stderr, "[WARN] Unknown argument: -%c\n",
+                                optopt);
+                        break;
+                default:
+                        break;
+                }        
+        }
+
+        /* Gets the remaining args. */
+        if (argc > optind) {
+                SRC_PATH = argv[optind];
+                DST_PATH = argv[optind + 1];
+        }
 }

@@ -15,6 +15,4 @@
     }\
 }
 
-void mirror_cu(cv::cuda::GpuMat src, cv::cuda::GpuMat dst, int h, int w);
-
 #endif // !IMG_PROC_H
