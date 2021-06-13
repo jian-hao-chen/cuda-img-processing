@@ -10,7 +10,7 @@ char *DST_PATH;
 
 bool IS_MIRROR = false;
 bool IS_GAMMA_CORRECT = false;
-bool IS_GAUSSIAN = false;
+bool IS_DENOISE = false;
 float GAMMA;
 
 void parse_args(int argc, char *argv[]);
@@ -18,6 +18,7 @@ void mirror_cu(cv::cuda::GpuMat src, cv::cuda::GpuMat dst, int h, int w);
 void gamma_correct_cu(cv::cuda::GpuMat src, cv::cuda::GpuMat dst, int h, int w,
                       float gamma);
 void gaussian_cu(cv::cuda::GpuMat src, cv::cuda::GpuMat dst, int h, int w);
+void median_cu(cv::cuda::GpuMat src, cv::cuda::GpuMat dst, int h, int w);
 
 int main(int argc, char *argv[])
 {
@@ -52,9 +53,15 @@ int main(int argc, char *argv[])
                         mirror_cu(cu_src, cu_dst, h, w);
                         cu_dst.copyTo(cu_src);
                 }
+                if (IS_DENOISE) {
+                        median_cu(cu_src, cu_dst, h, w);
+                        cu_dst.copyTo(cu_src);
+                }
                 if (IS_GAMMA_CORRECT) {
                         gamma_correct_cu(cu_src, cu_dst, h, w, GAMMA);
+                        //cu_dst.copyTo(cu_src);
                 }
+                
 
                 cu_dst.download(dst);
                 video.write(dst);
@@ -76,7 +83,7 @@ void parse_args(int argc, char *argv[])
 
         int cmd_opt = 0;
         while (true) {
-                cmd_opt = getopt(argc, argv, "mg:");
+                cmd_opt = getopt(argc, argv, "dmg:");
 
                 /* All args were parsed. */
                 if (cmd_opt == -1) {
@@ -85,8 +92,8 @@ void parse_args(int argc, char *argv[])
 
                 switch (cmd_opt) {
                 case 'd':
-                        IS_GAUSSIAN = true;
-                        printf("[INFO] -d Enable denoise.");
+                        IS_DENOISE = true;
+                        printf("[INFO] -d Enable denoise.\n");
                         break;
                 case 'g':
                         IS_GAMMA_CORRECT = true;

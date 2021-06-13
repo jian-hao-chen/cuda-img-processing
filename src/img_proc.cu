@@ -79,11 +79,63 @@ __global__ void gaussian_kernel(cv::cuda::PtrStepSz<uchar3> src,
 void gaussian_cu(cv::cuda::GpuMat src, cv::cuda::GpuMat dst, int h, int w)
 {
         assert(src.cols == w && src.rows == h);
-        src.copyTo(dst);
         dim3 block(32, 32);
         unsigned int num_block_x = (w + block.x - 1) / block.x;
         unsigned int num_block_y = (h + block.y - 1) / block.y;
         dim3 grid(num_block_x, num_block_y);
         gaussian_kernel <<<grid, block>>> (src, dst, h, w);
         CHECK_ERROR(cudaDeviceSynchronize());
+}
+
+struct pixel_t {
+        unsigned char bright;
+        unsigned int x;
+        unsigned int y;
+};
+
+__global__ void median_kernel(cv::cuda::PtrStepSz<uchar3> src,
+                              cv::cuda::PtrStepSz<uchar3> dst,
+                              int h, int w)
+{
+        struct pixel_t pixel[25];
+        unsigned int x = blockDim.x * blockIdx.x + threadIdx.x;
+        unsigned int y = blockDim.y * blockIdx.y + threadIdx.y;
+        if (1 < x && x < src.cols - 2 && 1 < y && y < src.rows - 2) {
+                for (size_t i = 0; i < 5; i++) {
+                        for (size_t j = 0; j < 5; j++) {
+                                pixel[3 * j + i].bright = (unsigned char)(
+                                        src(y - 2 + j, x - 2 + i).x * 0.114f +
+                                        src(y - 2 + j, x - 2 + i).y * 0.587f +
+                                        src(y - 2 + j, x - 2 + i).z * 0.299f
+                                );
+                                pixel[5 * j + i].x = x - 2 + i;
+                                pixel[5 * j + i].y = y - 2 + j;
+                        }
+                }
+                /* Sorts by pixel brightness. */
+                for (size_t i = 0; i < 13; i++) {
+                        for (size_t j = i; j < 25; j++) {
+                                if (pixel[j].bright > pixel[j + 1].bright) {
+                                        struct pixel_t tmp = pixel[j];
+                                        pixel[j] = pixel[j + 1];
+                                        pixel[j + 1] = tmp;
+                                }
+                        }
+                        
+                } 
+                dst(y, x).x = src(pixel[12].y, pixel[12].x).x;
+                dst(y, x).y = src(pixel[12].y, pixel[12].x).y;
+                dst(y, x).z = src(pixel[12].y, pixel[12].x).z;
+        }
+}
+
+void median_cu(cv::cuda::GpuMat src, cv::cuda::GpuMat dst, int h, int w)
+{
+        assert(src.cols == w && src.rows == h);
+        dim3 block(32, 32);
+        unsigned int num_block_x = (w + block.x - 1) / block.x;
+        unsigned int num_block_y = (h + block.y - 1) / block.y;
+        dim3 grid(num_block_x, num_block_y);
+        median_kernel <<<grid, block>>> (src, dst, h, w);
+        CHECK_ERROR(cudaDeviceSynchronize());  
 }
