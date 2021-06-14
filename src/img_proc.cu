@@ -54,20 +54,22 @@ __global__ void gaussian_kernel(cv::cuda::PtrStepSz<uchar3> src,
                                 cv::cuda::PtrStepSz<uchar3> dst,
                                 int h, int w)
 {
-        float filter[3][3] = {{0.0625f, 0.125f, 0.0625f},
-                              { 0.125f,  0.25f,  0.125f},
-                              {0.0625f, 0.125f, 0.0625f}};
+        float filter[5][5] = {{ 0.003765, 0.015019, 0.023792, 0.015019, 0.003765 },
+                              { 0.015019, 0.059912, 0.094907, 0.059912, 0.015019 },
+                              { 0.023792, 0.094907, 0.150342, 0.094907, 0.023792 },
+                              { 0.015019, 0.059912, 0.094907, 0.059912, 0.015019 },
+                              { 0.003765, 0.015019, 0.023792, 0.015019, 0.003765 }};
         unsigned int x = blockDim.x * blockIdx.x + threadIdx.x;
         unsigned int y = blockDim.y * blockIdx.y + threadIdx.y;
-        if (0 < x && x < src.cols -1 && 0 < y && y < src.rows - 1) {
+        if (1 < x && x < src.cols -2 && 1 < y && y < src.rows - 2) {
                 float b = 0;
                 float g = 0;
                 float r = 0;
-                for (size_t i = 0; i < 3; i++) {
-                        for (size_t j = 0; j < 3; j++) {
-                                b += src(y - 1 + j, x - 1 + i).x * filter[i][j];
-                                g += src(y - 1 + j, x - 1 + i).y * filter[i][j];
-                                r += src(y - 1 + j, x - 1 + i).z * filter[i][j];
+                for (size_t i = 0; i < 5; i++) {
+                        for (size_t j = 0; j < 5; j++) {
+                                b += src(y - 2 + j, x - 2 + i).x * filter[i][j];
+                                g += src(y - 2 + j, x - 2 + i).y * filter[i][j];
+                                r += src(y - 2 + j, x - 2 + i).z * filter[i][j];
                         }
                 }
                 dst(y, x).x = (unsigned char)b;

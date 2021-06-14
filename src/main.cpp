@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
 
 #include <opencv2/opencv.hpp>
 
@@ -40,6 +41,9 @@ int main(int argc, char *argv[])
         /* Creats video writer. */
         cv::VideoWriter video(DST_PATH, VIDEO_CODEC, 25, cv::Size(w, h));
 
+        struct timespec start, end;
+        clock_gettime(CLOCK_MONOTONIC, &start);
+
         /* Reads frames. */
         while (true) {
                 cv::Mat frame;
@@ -57,7 +61,7 @@ int main(int argc, char *argv[])
                                 dst.copyTo(src);
                         }
                         if (IS_DENOISE) {
-                                median(src, dst, h, w);
+                                gaussian(src, dst, h, w);
                                 dst.copyTo(src);
                         }
                         if (IS_GAMMA_CORRECT) {
@@ -74,7 +78,7 @@ int main(int argc, char *argv[])
                                 cu_dst.copyTo(cu_src);
                         }
                         if (IS_DENOISE) {
-                                median_cu(cu_src, cu_dst, h, w);
+                                gaussian_cu(cu_src, cu_dst, h, w);
                                 cu_dst.copyTo(cu_src);
                         }
                         if (IS_GAMMA_CORRECT) {
@@ -84,6 +88,9 @@ int main(int argc, char *argv[])
                 }
                 video.write(dst);
         }
+
+        clock_gettime(CLOCK_MONOTONIC, &end);
+        printf("[INFO] Elapsed time: %ld s.\n", end.tv_sec - start.tv_sec);
         
         /* All Done. */
         cap.release();
@@ -147,7 +154,7 @@ void mirror(cv::Mat &src, cv::Mat &dst, int h, int w)
 {
         for (size_t y = 0; y < h; y++) {
                 for (size_t x = 0; x < w; x++) {
-                        dst(y, x) = src(y, w - x - 1);
+                        dst.at<cv::Vec3b>(y, x) = src.at<cv::Vec3b>(y, w - x - 1);
                 }
         }  
 }
@@ -156,16 +163,39 @@ void gamma_correct(cv::Mat &src, cv::Mat &dst, int h, int w, float gamma)
 {
         for (size_t y = 0; y < h; y++) {
                 for (size_t x = 0; x < w; x++) {
-                        
+                        cv::Vec3f tmp = src.at<cv::Vec3b>(y, x);
+                        tmp[0] = 255 * std::pow(tmp[0] / 255.0f, gamma);
+                        tmp[1] = 255 * std::pow(tmp[1] / 255.0f, gamma);
+                        tmp[2] = 255 * std::pow(tmp[2] / 255.0f, gamma);
+                        dst.at<cv::Vec3b>(y, x)[0] = (unsigned char)tmp[0];
+                        dst.at<cv::Vec3b>(y, x)[1] = (unsigned char)tmp[1];
+                        dst.at<cv::Vec3b>(y, x)[2] = (unsigned char)tmp[2];
                 }
         }  
 }
 
 void gaussian(cv::Mat &src, cv::Mat &dst, int h, int w)
 {
-        for (size_t y = 0; y < h; y++) {
-                for (size_t x = 0; x < w; x++) {
-                        /* code */
+        float filter[5][5] = {{ 0.003765, 0.015019, 0.023792, 0.015019, 0.003765 },
+                              { 0.015019, 0.059912, 0.094907, 0.059912, 0.015019 },
+                              { 0.023792, 0.094907, 0.150342, 0.094907, 0.023792 },
+                              { 0.015019, 0.059912, 0.094907, 0.059912, 0.015019 },
+                              { 0.003765, 0.015019, 0.023792, 0.015019, 0.003765 }};
+        for (size_t y = 2; y < h - 2; y++) {
+                for (size_t x = 2; x < w - 2; x++) {
+                        cv::Vec3f tmp(0, 0, 0);
+                        for (size_t i = 0; i < 5; i++) {
+                                for (size_t j = 0; j < 5; j++) {
+                                        cv::Vec3b p = src.at<cv::Vec3b>(y - 2 + i, x - 2 + j);
+                                        tmp[0] += p[0] * filter[i][j];
+                                        tmp[1] += p[1] * filter[i][j];
+                                        tmp[2] += p[2] * filter[i][j];
+                                }
+                                
+                        }
+                        dst.at<cv::Vec3b>(y, x)[0] = (unsigned char)tmp[0];
+                        dst.at<cv::Vec3b>(y, x)[1] = (unsigned char)tmp[1];
+                        dst.at<cv::Vec3b>(y, x)[2] = (unsigned char)tmp[2];
                 }
         }  
 }
